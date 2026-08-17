@@ -86,8 +86,8 @@ Requires authentication.
 
 | Role | Email | Password |
 | --- | --- | --- |
-| admin | `admin@example.com` | `SEED_ADMIN_PASSWORD` from `.env` |
-| user | `user1@example.com` | `Password@123` |
+| admin | `admin@care.com` | `Admin@123456` |
+| user | `user1@care.com` | `Password@123` |
 
 ## Roles & Permissions
 
