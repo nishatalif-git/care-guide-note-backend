@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { requireAuth, requireRole } from "../../middleware/auth";
+import { validate } from "../../middleware/validate";
+import { idParam } from "../../validation/common";
 import {
   createUserSchema,
   interestsQuerySchema,
@@ -7,19 +10,30 @@ import {
   userPostsQuerySchema,
 } from "./users.validation";
 import * as usersService from "./users.service";
-import { validate } from "../../middleware/validate";
-import { idParam } from "../../validation/common";
 
 export const usersRouter = Router();
 
 
-usersRouter.post("/", validate({ body: createUserSchema }), async (req, res) => {
-  const user = await usersService.createUser(req.body);
-  res.status(201).json({ user });
-});
+usersRouter.get(
+  "/insights/by-interest",
+  requireAuth,
+  requireRole("admin"),
+  validate({ query: interestsQuerySchema }),
+  async (req, res) => {
+    res.json(await usersService.groupUsersByInterest(req.query));
+  },
+);
+
+
+usersRouter.use(requireAuth, requireRole("admin"));
 
 usersRouter.get("/", validate({ query: listUsersSchema }), async (req, res) => {
   res.json(await usersService.listUsers(req.query));
+});
+
+usersRouter.post("/", validate({ body: createUserSchema }), async (req, res) => {
+  const user = await usersService.createUser(req.body);
+  res.status(201).json({ user });
 });
 
 usersRouter.get("/:id", validate({ params: idParam }), async (req, res) => {

@@ -1,7 +1,6 @@
 import { Types } from "mongoose";
 import { User, type Role } from "../../models/user.model";
-import { Note } from "../../models/note.model";
-import { Post } from "../../models/post.model";
+
 import { ApiError } from "../../utils/ApiError";
 import { hashPassword } from "../../utils/password";
 import {
@@ -9,33 +8,32 @@ import {
   toPageParams,
   type Paginated,
 } from "../../utils/pagination";
+import { toPublicUser, type PublicUser } from "../auth/auth.service";
 
 
-export type PublicUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  interests: string[];
-  createdAt: Date;
-};
+export async function listUsers(query: {
+  page?: number;
+  limit?: number;
+}): Promise<Paginated<PublicUser>> {
+  const page = toPageParams(query);
 
-export function toPublicUser(doc: {
-  _id: unknown;
-  name: string;
-  email: string;
-  role: Role;
-  interests: string[];
-  createdAt?: Date;
-}): PublicUser {
-  return {
-    id: String(doc._id),
-    name: doc.name,
-    email: doc.email,
-    role: doc.role,
-    interests: doc.interests ?? [],
-    createdAt: doc.createdAt ?? new Date(0),
-  };
+  const [docs, total] = await Promise.all([
+    User.find({})
+      .sort({ createdAt: -1 })
+      .skip(page.skip)
+      .limit(page.limit)
+      .lean(),  
+    User.estimatedDocumentCount(),
+  ]);
+
+  return paginated(docs.map(toPublicUser), total, page);
+}
+
+
+export async function getUser(userId: string): Promise<PublicUser> {
+  const found = await User.findById(userId).lean();
+  if (!found) throw ApiError.notFound("User not found");
+  return toPublicUser(found);
 }
 
 export async function createUser(input: {
@@ -90,7 +88,6 @@ export async function updateUser(
   return toPublicUser(user);
 }
 
-
 export async function deleteUser(
   actorId: string,
   userId: string,
@@ -105,13 +102,10 @@ export async function deleteUser(
   if (!user) throw ApiError.notFound("User not found");
 
   const ownerId = new Types.ObjectId(userId);
-  await Promise.all([
-    Note.deleteMany({ owner: ownerId }),
-    Post.deleteMany({ author: ownerId }),
-    User.deleteOne({ _id: ownerId }),
-  ]);
+  
+  await User.deleteOne({ _id: ownerId })
+  
 }
-
 
 
 export type InterestGroup = {
@@ -137,7 +131,7 @@ export async function groupUsersByInterest(query: {
   }>([
     { $match: match },
     { $unwind: "$interests" },
-   
+    
     ...(query.interest ? [{ $match: { interests: query.interest } }] : []),
     {
       $group: {
@@ -146,7 +140,7 @@ export async function groupUsersByInterest(query: {
         users: { $push: { id: "$_id", name: "$name", email: "$email" } },
       },
     },
-    
+    // Most popular first; _id breaks ties so paging is deterministic.
     { $sort: { count: -1, _id: 1 } },
     {
       $facet: {
@@ -170,49 +164,3 @@ export async function groupUsersByInterest(query: {
 }
 
 
-
-export type UserPosts = {
-  user: { id: string; name: string; email: string };
-  posts: { id: string; title: string; body: string; createdAt: Date }[];
-  total: number;
-};
-
-export async function getUserPosts(
-  userId: string,
-  query: { page?: number; limit?: number },
-): Promise<UserPosts & { page: number; limit: number; totalPages: number }> {
-  const page = toPageParams(query);
-
-  const [result] = await User.aggregate<UserPosts>([
-    { $match: { _id: new Types.ObjectId(userId) } },
-    {
-      $lookup: {
-        from: Post.collection.collectionName,
-        let: { authorId: "$_id" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$author", "$$authorId"] } } },
-          { $sort: { createdAt: -1 } },
-          { $project: { _id: 0, id: "$_id", title: 1, body: 1, createdAt: 1 } },
-        ],
-        as: "allPosts",
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        user: { id: "$_id", name: "$name", email: "$email" },
-        posts: { $slice: ["$allPosts", page.skip, page.limit] },
-        total: { $size: "$allPosts" },
-      },
-    },
-  ]);
-
-  if (!result) throw ApiError.notFound("User not found");
-
-  return {
-    ...result,
-    page: page.page,
-    limit: page.limit,
-    totalPages: Math.ceil(result.total / page.limit),
-  };
-}

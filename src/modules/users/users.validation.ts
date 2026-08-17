@@ -1,6 +1,6 @@
 import Joi from 'joi';
 import { ROLES } from '../../models/user.model';
-import { email, paginationQuery, password } from '../../validation/common';
+import { email, paginationQuery, password } from "../../validation/common";
 
 const interests = Joi.array()
   .items(Joi.string().trim().lowercase().min(1).max(50))
