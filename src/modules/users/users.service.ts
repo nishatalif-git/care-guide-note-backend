@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 import { User, type Role } from "../../models/user.model";
-
+import { Note } from "../../models/note.model";
+import { Post } from "../../models/post.model";
 import { ApiError } from "../../utils/ApiError";
 import { hashPassword } from "../../utils/password";
 import {
@@ -9,7 +10,6 @@ import {
   type Paginated,
 } from "../../utils/pagination";
 import { toPublicUser, type PublicUser } from "../auth/auth.service";
-
 
 export async function listUsers(query: {
   page?: number;
@@ -22,14 +22,14 @@ export async function listUsers(query: {
       .sort({ createdAt: -1 })
       .skip(page.skip)
       .limit(page.limit)
-      .lean(),  
+      .lean(),
     User.estimatedDocumentCount(),
   ]);
 
   return paginated(docs.map(toPublicUser), total, page);
 }
 
-
+/** Served by the default _id index. */
 export async function getUser(userId: string): Promise<PublicUser> {
   const found = await User.findById(userId).lean();
   if (!found) throw ApiError.notFound("User not found");
@@ -88,6 +88,7 @@ export async function updateUser(
   return toPublicUser(user);
 }
 
+
 export async function deleteUser(
   actorId: string,
   userId: string,
@@ -102,9 +103,11 @@ export async function deleteUser(
   if (!user) throw ApiError.notFound("User not found");
 
   const ownerId = new Types.ObjectId(userId);
-  
-  await User.deleteOne({ _id: ownerId })
-  
+  await Promise.all([
+    Note.deleteMany({ owner: ownerId }),
+    Post.deleteMany({ author: ownerId }),
+    User.deleteOne({ _id: ownerId }),
+  ]);
 }
 
 
@@ -131,7 +134,6 @@ export async function groupUsersByInterest(query: {
   }>([
     { $match: match },
     { $unwind: "$interests" },
-    
     ...(query.interest ? [{ $match: { interests: query.interest } }] : []),
     {
       $group: {
@@ -164,3 +166,48 @@ export async function groupUsersByInterest(query: {
 }
 
 
+export type UserPosts = {
+  user: { id: string; name: string; email: string };
+  posts: { id: string; title: string; body: string; createdAt: Date }[];
+  total: number;
+};
+
+export async function getUserPosts(
+  userId: string,
+  query: { page?: number; limit?: number },
+): Promise<UserPosts & { page: number; limit: number; totalPages: number }> {
+  const page = toPageParams(query);
+
+  const [result] = await User.aggregate<UserPosts>([
+    { $match: { _id: new Types.ObjectId(userId) } },
+    {
+      $lookup: {
+        from: Post.collection.collectionName,
+        let: { authorId: "$_id" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$author", "$$authorId"] } } },
+          { $sort: { createdAt: -1 } },
+          { $project: { _id: 0, id: "$_id", title: 1, body: 1, createdAt: 1 } },
+        ],
+        as: "allPosts",
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        user: { id: "$_id", name: "$name", email: "$email" },
+        posts: { $slice: ["$allPosts", page.skip, page.limit] },
+        total: { $size: "$allPosts" },
+      },
+    },
+  ]);
+
+  if (!result) throw ApiError.notFound("User not found");
+
+  return {
+    ...result,
+    page: page.page,
+    limit: page.limit,
+    totalPages: Math.ceil(result.total / page.limit),
+  };
+}

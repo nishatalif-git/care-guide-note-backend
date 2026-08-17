@@ -24,6 +24,17 @@ usersRouter.get(
   },
 );
 
+usersRouter.get(
+  "/:id/posts",
+  validate({ params: idParam, query: userPostsQuerySchema }),
+  async (req, res) => {
+    res.json(
+      await usersService.getUserPosts(req.params.id as string, req.query),
+    );
+  },
+);
+
+
 
 usersRouter.use(requireAuth, requireRole("admin"));
 
