@@ -27,7 +27,8 @@ const userSchema = new Schema(
   { timestamps: true, versionKey: false },
 );
 
-// as per task index created with schema.index() only
+// as per task index should created with schema.index() only
+
 userSchema.index({ email: 1 }, { unique: true, name: "email_unique" });
 
 export type UserAttrs = InferSchemaType<typeof userSchema>;
