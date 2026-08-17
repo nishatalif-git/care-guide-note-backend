@@ -21,7 +21,9 @@ export const env = {
   jwtExpiresIn: optional('JWT_EXPIRES_IN', '1h'),
   port: Number(optional('PORT', '4000')),
   nodeEnv: optional('NODE_ENV', 'development'),
-
+  corsOrigin: optional('CORS_ORIGIN', 'http://localhost:3000'),
+  seedAdminEmail: optional('SEED_ADMIN_EMAIL', 'admin@care.com'),
+  seedAdminPassword: optional('SEED_ADMIN_PASSWORD', 'Admin@12345'),
 } as const;
 
 export const isProduction = env.nodeEnv === 'production';
