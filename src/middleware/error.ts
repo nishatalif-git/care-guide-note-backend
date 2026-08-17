@@ -13,10 +13,7 @@ function isDuplicateKeyError(err: unknown): err is MongoDuplicateKeyError {
   return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
 }
 
-/**
- * Single place where an error becomes a response body. Every branch produces
- * `{ error: { message, details? } }` so the client parses one shape.
- */
+
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof ApiError) {
     res.status(err.status).json({
@@ -25,7 +22,6 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
-  // The unique index on users.email surfaces here on a racing double-register.
   if (isDuplicateKeyError(err)) {
     const field = Object.keys(err.keyValue ?? {})[0] ?? 'field';
     res.status(409).json({

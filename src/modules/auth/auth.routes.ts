@@ -6,11 +6,6 @@ import * as authService from './auth.service';
 
 export const authRouter = Router();
 
-/*
- * Handlers are plain `async` functions with no try/catch and no wrapper:
- * Express 5 forwards a rejected promise returned by a handler to the error
- * middleware itself. On Express 4 each one needed an asyncHandler() wrapper.
- */
 
 authRouter.post('/register', validate({ body: registerSchema }), async (req, res) => {
   const result = await authService.register(req.body);

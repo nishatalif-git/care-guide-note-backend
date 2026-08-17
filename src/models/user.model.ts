@@ -28,8 +28,13 @@ const userSchema = new Schema(
 );
 
 // as per task index should created with schema.index() only
-
 userSchema.index({ email: 1 }, { unique: true, name: "email_unique" });
+
+// index added to retirive list data in descending order
+userSchema.index({ createdAt: -1 }, { name: "createdAt_desc" });
+
+// added multikey index backing the $match stage, including the optional ?interest=chess filter.
+userSchema.index({ interests: 1 }, { name: "interests_multikey" });
 
 export type UserAttrs = InferSchemaType<typeof userSchema>;
 export type UserDoc = HydratedDocument<UserAttrs>;
